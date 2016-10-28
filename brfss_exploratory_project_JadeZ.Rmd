@@ -1,0 +1,212 @@
+---
+title: "Exploring association factors for diet and drinking behaviors using the BRFSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+```
+
+### Load data
+ 
+
+```{r load-data}
+load("brfss2013.RData")
+```
+
+* * *
+
+## Part 1: Data: generalizability and causation.
+
+The BRFSS data is described in detail in the brfss_reference.html document. Judging from the information in the document, the generalizability of the BRFSS study is limited by a couple of factors. First, the landline phone survey exclusively sample households with landline telephones installed. Similarly, the cell phone survey exclusively sample people who own cell phones. Second, people who choose to participate in these surveys may not be a random sample from the whole population. For example, there might be a higher motivation for people who care more about their health to participate in this survey (those who pick up the phone and go through with the survey). These factors may cause bias in the sampled data.
+
+The data obtained are purely observational. In other words, there are no treatments or experiments, let alone random assignments. Therefore associations observed from this data only suggests correlation but not causation.
+
+## Part 2: Research questions
+In general, I am interested in discovering the association factors of health-related eating and drinking behaviors.
+
+**Research quesion 1:**
+Do people with higher education level drink less (accounting for age)?
+
+**Research quesion 2:**
+Do people with higher income eat more fruits and vegetables?
+
+**Research quesion 3:**
+Do people in different ethnic groups vary in their drinking, fruit and vegetable consumption?
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+**Research quesion 1:**
+
+To answer the first question (Do people with higher education level drink less?), I compare the Computed Number Of Drinks Of Alcohol Beverages Per Day (calculated variable X_drnkdy4 in the data set) among different education levels to see if there is a significant variation. My hypothesis is that people with higher education should drink less.
+
+To make it easier to show on charts and graphs, first I create a new variable containing abbreviated education levels:
+
+```{r}
+brfss2013 <- brfss2013%>%
+  mutate(edu_abrev = case_when(.$X_educag == "Did not graduate high school" ~ "< high school",
+         .$X_educag == "Graduated high school" ~ "high school",
+         .$X_educag == "Attended college or technical school" ~ "started college/tech school",
+         .$X_educag == "Graduated from college or technical school" ~ "college/tech school",
+         TRUE ~ "NA"))
+```
+
+It needs to be ordered properly:
+
+```{r}
+brfss2013$edu_abrev <- factor(brfss2013$edu_abrev,levels = c("< high school","high school", "started college/tech school","college/tech school"), ordered=TRUE)
+```
+
+Using the new variable to represent education level,
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_drnkdy4),!is.na(edu_abrev)) %>%
+  group_by(edu_abrev) %>%
+  summarise(mean_daydrks = mean(X_drnkdy4))
+```
+The mean number of drinks actually increases with education level! However, there is a big confounding factor: age, since you are not supposed to drink under 21. Therefore I filter out people under age:
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_drnkdy4),!is.na(edu_abrev),!is.na(X_age80),X_age80>=21) %>%
+  group_by(edu_abrev) %>%
+  summarise(mean_daydrks = mean(X_drnkdy4))
+```
+The conclusion is the same! It seems that higher education cannot help people deal with drinking issues.
+
+To compare in more details (considering spread within each education level), I plot a side-by-side boxplot:
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_drnkdy4),!is.na(edu_abrev),!is.na(X_age80),X_age80>=21) %>%
+ggplot(aes(x = factor(edu_abrev), y = X_drnkdy4)) +
+  geom_boxplot()
+```
+
+From the graph we can see that, because of the big outliers, it is hard to see the result of the comparison. Therefore I am going to drop all data bigger than 100 (since it is not likely for anyone to drink more than 100 alcoholic drinks a day anyway!) while plotting:
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_drnkdy4),!is.na(edu_abrev), !is.na(X_age80),X_age80>=21,X_drnkdy4 < 100) %>%
+ggplot(aes(x = factor(edu_abrev), y = X_drnkdy4)) +
+  geom_boxplot()
+```
+
+From the graph we can see that, both the mean and the variation (spread within a category) increase with education level. The interpretation of this result is that, first, people drink more on average when they have higher education. Second,it is more difficult to tell how much a person drinks if s/he has higher education; it could be a lot or very little. 
+
+**Research quesion 2:**
+To answer the question "Do people with higher income eat more fruits and vegetables?", I plot the total number of fruits consumed per day (calculated variable frutsum) and the total number of vegetables consumed per day (calculated variable vegesum) against income level (calculated variable incomg), respectively. My hypothesis is that people with higher income should eat more fruits and vegetables, since they potentially have more money and time to invest in their health.
+
+Like in question 1, first I create a new variable containing abbreviated income levels to make it easier to show on graphs:
+```{r}
+brfss2013 <- brfss2013%>%
+  mutate(incom_abrev = case_when(.$X_incomg == "Less than $15,000" ~ "< 15k",
+         .$X_incomg == "$15,000 to less than $25,000" ~ "15k - 25k",
+         .$X_incomg == "$25,000 to less than $35,000" ~ "25k - 35k",
+         .$X_incomg == "$35,000 to less than $50,000" ~ "35k - 50k",
+         .$X_incomg == "$50,000 or more" ~ "> 50k",
+         TRUE ~ "NA"))
+
+brfss2013$incom_abrev <- factor(brfss2013$incom_abrev,levels = c("< 15k","15k - 25k", "25k - 35k","35k - 50k","> 50k"), ordered=TRUE)
+```
+
+First let's compare the fruits per day among income levels:
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_frutsum),!is.na(incom_abrev)) %>%
+  group_by(incom_abrev) %>%
+  summarise(mean_frut = mean(X_frutsum))
+```
+
+Then vegetables:
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_vegesum),!is.na(incom_abrev)) %>%
+  group_by(incom_abrev) %>%
+  summarise(mean_vege = mean(X_vegesum))
+```
+
+From above we can see that people with higher level of income do eat more fruits and vegetables on average. To see the spread within each category, let's look at the side-by-side boxplots:
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_frutsum),!is.na(incom_abrev)) %>%
+ggplot(aes(x = incom_abrev, y = X_frutsum)) +
+  geom_boxplot()
+```
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_vegesum),!is.na(incom_abrev)) %>%
+ggplot(aes(x = incom_abrev, y = X_vegesum)) +
+  geom_boxplot()
+```
+
+Apparently we have the same problem of big outliers as in question 1. Therefore I will take the same measure and get rid of outliers bigger than 500.
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_frutsum),!is.na(incom_abrev),X_frutsum < 500) %>%
+ggplot(aes(x = incom_abrev, y = X_frutsum)) +
+  geom_boxplot()
+```
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_vegesum),!is.na(incom_abrev),X_vegesum < 500) %>%
+ggplot(aes(x = incom_abrev, y = X_vegesum)) +
+  geom_boxplot()
+```
+
+We can see that the spread within each category is roughly the same for both fruit and vegetable consumption. Also, fruit consumption seems to increase a lot from income level < 15k to 15k - 25k, but is generally even among all levels beyond 15k. In contrast, vegetable consumption seems to increase consistently with income level, suggesting that vegetable consumption is a better indicator of income level (the more the higher) than fruit consumption.
+
+**Research quesion 3:**
+To answer the third question, I repeat the analyses in question 2 and 3 across ethnic groups. To save space, I will skip the boxplots and instead use IQR to show the spread within each category.
+
+Drinking:
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_drnkdy4),!is.na(X_racegr3)) %>%
+  group_by(X_racegr3) %>%
+  summarise(mean_drn = mean(X_drnkdy4), IQR_drn = IQR(X_drnkdy4)) %>%
+  arrange(desc(mean_drn))
+```
+
+Fruit consumption:
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_frutsum),!is.na(X_racegr3)) %>%
+  group_by(X_racegr3) %>%
+  summarise(mean_frut = mean(X_frutsum), IQR_frut = IQR(X_frutsum)) %>%
+  arrange(desc(mean_frut))
+```
+
+```{r}
+brfss2013 %>%
+  filter(!is.na(X_vegesum),!is.na(X_racegr3)) %>%
+  group_by(X_racegr3) %>%
+  summarise(mean_vege = mean(X_vegesum), IQR_vege = IQR(X_vegesum)) %>%
+  arrange(desc(mean_vege))
+```
+
+Judging from the mean values, on average, Black-only, non-hispanic people drink the least, eat the most amount of fruit but the least amount of vegetables. Multiracial, non-hispanic people drink the most and eat the most amount of vegetables. Other race-only, non-hispanic people eat the least amount of fruits. 
+
+Judging from the IQR, white people vary the most and black people vary the least in the number of drinks per day. For fruit consumption, however, white people vary the least and black people vary the most. White people also vary the least for vegetable consumption, while Multiracial, Non-Hispanic people vary the most.
+
+In general, there is not much consistency in the ethnic variation among drinking, fruit consumption and vegetable consumption. If anything, the mean values of drinking and vegetable consumption are roughly positively associated across ethinic groups (except for white-only and other race-only non-hispanic people). No ethnic group seems to be significantly healthier (drink less, eat more fruits and vegetables) than others.
